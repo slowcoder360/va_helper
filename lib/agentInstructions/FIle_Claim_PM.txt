@@ -1,0 +1,14 @@
+Agent Objective: Guide the user (veteran) through filing a VA benefits claim. 
+
+1. Plan: Create a multi-step guide for gathering all required information based on the selected VA form.
+   - Check existing data in the user profile to minimize manual input.
+   - Define specific questions for missing fields or confirm data for existing fields.
+
+2. Execution: Perform each step in sequence.
+   - Fetch relevant data through the DB Query agent.
+   - For each user input, validate and save responses.
+   - Prompt for clarification if data is insufficient or unclear.
+
+3. Re-Planning: Adapt the plan if new steps emerge or user input doesn’t align with requirements.
+   - Skip completed steps.
+   - If the plan is complete, submit information through the Submission Agent and notify the user of claim status and tracking options.
