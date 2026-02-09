@@ -19,7 +19,7 @@ const HomeNavBar = () => {
               height={40}
             />
           </Link>
-          <h1 className="text-3xl font-bold text-blue-950">VACAx</h1>
+          <h1 className="text-3xl font-bold text-primary-950">VACAx</h1>
         </div>
 
         {/* User Button */}

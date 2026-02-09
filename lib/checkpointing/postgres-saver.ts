@@ -1,0 +1,456 @@
+import type { RunnableConfig } from "@langchain/core/runnables";
+import {
+  BaseCheckpointSaver,
+  type Checkpoint,
+  type CheckpointListOptions,
+  type CheckpointTuple,
+  type SerializerProtocol,
+  type PendingWrite,
+  type CheckpointMetadata,
+  type ChannelVersions,
+  WRITES_IDX_MAP,
+} from "@langchain/langgraph-checkpoint";
+import pg from "pg";
+
+import { getMigrations } from "./migrations";
+import {
+  type SQL_STATEMENTS,
+  getSQLStatements,
+  getTablesWithSchema,
+} from "./sql";
+
+interface PostgresSaverOptions {
+  schema: string;
+}
+
+const _defaultOptions: PostgresSaverOptions = {
+  schema: "public",
+};
+
+const _ensureCompleteOptions = (
+  options?: Partial<PostgresSaverOptions>
+): PostgresSaverOptions => {
+  return {
+    ..._defaultOptions,
+    ...options,
+  };
+};
+
+const { Pool } = pg;
+
+export class PostgresSaver extends BaseCheckpointSaver {
+  private pool: pg.Pool;
+  private readonly options: PostgresSaverOptions;
+  private readonly SQL_STATEMENTS: SQL_STATEMENTS;
+  protected isSetup: boolean;
+
+  constructor(
+    pool: pg.Pool,
+    serde?: SerializerProtocol,
+    options?: Partial<PostgresSaverOptions>
+  ) {
+    super(serde);
+    this.pool = pool;
+    this.isSetup = false;
+    this.options = _ensureCompleteOptions(options);
+    this.SQL_STATEMENTS = getSQLStatements(this.options.schema);
+  }
+
+  static fromConnString(
+    connString: string,
+    options?: Partial<PostgresSaverOptions>
+  ): PostgresSaver {
+    const pool = new Pool({ connectionString: connString });
+    return new PostgresSaver(pool, undefined, options);
+  }
+
+  async setup(): Promise<void> {
+    const client = await this.pool.connect();
+    const SCHEMA_TABLES = getTablesWithSchema(this.options.schema);
+    try {
+      await client.query(`CREATE SCHEMA IF NOT EXISTS ${this.options.schema}`);
+      let version = -1;
+      try {
+        const result = await client.query(
+          `SELECT v FROM ${SCHEMA_TABLES.checkpoint_migrations} ORDER BY v DESC LIMIT 1`
+        );
+        if (result.rows.length > 0) {
+          version = result.rows[0].v;
+        }
+      } catch (error: any) {
+        if (
+          error?.message.includes(
+            `relation "${SCHEMA_TABLES.checkpoint_migrations}" does not exist`
+          )
+        ) {
+          version = -1;
+        } else {
+          throw error;
+        }
+      }
+
+      const MIGRATIONS = getMigrations(this.options.schema);
+      for (let v = version + 1; v < MIGRATIONS.length; v += 1) {
+        await client.query(MIGRATIONS[v]);
+        await client.query(
+          `INSERT INTO ${SCHEMA_TABLES.checkpoint_migrations} (v) VALUES ($1)`,
+          [v]
+        );
+      }
+    } finally {
+      client.release();
+    }
+  }
+
+  protected async _loadCheckpoint(
+    checkpoint: Omit<Checkpoint, "pending_sends" | "channel_values">,
+    channelValues: [Uint8Array, Uint8Array, Uint8Array][],
+    pendingSends: [Uint8Array, Uint8Array][]
+  ): Promise<Checkpoint> {
+    return {
+      ...checkpoint,
+      pending_sends: await Promise.all(
+        (pendingSends || []).map(([c, b]) =>
+          this.serde.loadsTyped(c.toString(), b)
+        )
+      ),
+      channel_values: await this._loadBlobs(channelValues),
+    };
+  }
+
+  protected async _loadBlobs(
+    blobValues: [Uint8Array, Uint8Array, Uint8Array][]
+  ): Promise<Record<string, unknown>> {
+    if (!blobValues || blobValues.length === 0) {
+      return {};
+    }
+    const entries = await Promise.all(
+      blobValues
+        .filter(([, t]) => new TextDecoder().decode(t) !== "empty")
+        .map(async ([k, t, v]) => [
+          new TextDecoder().decode(k),
+          await this.serde.loadsTyped(new TextDecoder().decode(t), v),
+        ])
+    );
+    return Object.fromEntries(entries);
+  }
+
+  protected async _loadMetadata(metadata: Record<string, unknown>) {
+    const [type, dumpedValue] = this.serde.dumpsTyped(metadata);
+    return this.serde.loadsTyped(type, dumpedValue);
+  }
+
+  protected async _loadWrites(
+    writes: [Uint8Array, Uint8Array, Uint8Array, Uint8Array][]
+  ): Promise<[string, string, unknown][]> {
+    const decoder = new TextDecoder();
+    return writes
+      ? await Promise.all(
+          writes.map(async ([tid, channel, t, v]) => [
+            decoder.decode(tid),
+            decoder.decode(channel),
+            await this.serde.loadsTyped(decoder.decode(t), v),
+          ])
+        )
+      : [];
+  }
+
+  protected _dumpBlobs(
+    threadId: string,
+    checkpointNs: string,
+    values: Record<string, unknown>,
+    versions: ChannelVersions
+  ): [string, string, string, string, string, Uint8Array | undefined][] {
+    if (Object.keys(versions).length === 0) {
+      return [];
+    }
+
+    return Object.entries(versions).map(([k, ver]) => {
+      const [type, value] =
+        k in values ? this.serde.dumpsTyped(values[k]) : ["empty", null];
+      return [
+        threadId,
+        checkpointNs,
+        k,
+        ver.toString(),
+        type,
+        value ? new Uint8Array(value) : undefined,
+      ];
+    });
+  }
+
+  protected _dumpCheckpoint(checkpoint: Checkpoint) {
+    const serialized: Record<string, unknown> = {
+      ...checkpoint,
+      pending_sends: [],
+    };
+    if ("channel_values" in serialized) {
+      delete serialized.channel_values;
+    }
+    return serialized;
+  }
+
+  protected _dumpMetadata(metadata: CheckpointMetadata) {
+    const [, serializedMetadata] = this.serde.dumpsTyped(metadata);
+    return JSON.parse(
+      new TextDecoder().decode(serializedMetadata).replace(/\0/g, "")
+    );
+  }
+
+  protected _dumpWrites(
+    threadId: string,
+    checkpointNs: string,
+    checkpointId: string,
+    taskId: string,
+    writes: [string, unknown][]
+  ): [string, string, string, string, number, string, string, Uint8Array][] {
+    return writes.map(([channel, value], idx) => {
+      const [type, serializedValue] = this.serde.dumpsTyped(value);
+      return [
+        threadId,
+        checkpointNs,
+        checkpointId,
+        taskId,
+        WRITES_IDX_MAP[channel] !== undefined ? WRITES_IDX_MAP[channel] : idx,
+        channel,
+        type,
+        new Uint8Array(serializedValue),
+      ];
+    });
+  }
+
+  protected _searchWhere(
+    config?: RunnableConfig,
+    filter?: Record<string, unknown>,
+    before?: RunnableConfig
+  ): [string, unknown[]] {
+    const wheres: string[] = [];
+    const paramValues: unknown[] = [];
+
+    if (config?.configurable?.thread_id) {
+      wheres.push(`thread_id = $${paramValues.length + 1}`);
+      paramValues.push(config.configurable.thread_id);
+    }
+
+    if (
+      config?.configurable?.checkpoint_ns !== undefined &&
+      config?.configurable?.checkpoint_ns !== null
+    ) {
+      wheres.push(`checkpoint_ns = $${paramValues.length + 1}`);
+      paramValues.push(config.configurable.checkpoint_ns);
+    }
+
+    if (config?.configurable?.checkpoint_id) {
+      wheres.push(`checkpoint_id = $${paramValues.length + 1}`);
+      paramValues.push(config.configurable.checkpoint_id);
+    }
+
+    if (filter && Object.keys(filter).length > 0) {
+      wheres.push(`metadata @> $${paramValues.length + 1}`);
+      paramValues.push(JSON.stringify(filter));
+    }
+
+    if (before?.configurable?.checkpoint_id !== undefined) {
+      wheres.push(`checkpoint_id < $${paramValues.length + 1}`);
+      paramValues.push(before.configurable.checkpoint_id);
+    }
+
+    return [
+      wheres.length > 0 ? `WHERE ${wheres.join(" AND ")}` : "",
+      paramValues,
+    ];
+  }
+
+  async getTuple(config: RunnableConfig): Promise<CheckpointTuple | undefined> {
+    const {
+      thread_id,
+      checkpoint_ns = "",
+      checkpoint_id,
+    } = config.configurable ?? {};
+
+    let args: unknown[];
+    let where: string;
+    if (checkpoint_id) {
+      where = `WHERE thread_id = $1 AND checkpoint_ns = $2 AND checkpoint_id = $3`;
+      args = [thread_id, checkpoint_ns, checkpoint_id];
+    } else {
+      where = `WHERE thread_id = $1 AND checkpoint_ns = $2 ORDER BY checkpoint_id DESC LIMIT 1`;
+      args = [thread_id, checkpoint_ns];
+    }
+
+    const result = await this.pool.query(
+      this.SQL_STATEMENTS.SELECT_SQL + where,
+      args
+    );
+
+    const [row] = result.rows;
+
+    if (row === undefined) {
+      return undefined;
+    }
+
+    const checkpoint = await this._loadCheckpoint(
+      row.checkpoint,
+      row.channel_values,
+      row.pending_sends
+    );
+    const finalConfig = {
+      configurable: {
+        thread_id,
+        checkpoint_ns,
+        checkpoint_id: row.checkpoint_id,
+      },
+    };
+    const metadata = await this._loadMetadata(row.metadata);
+    const parentConfig = row.parent_checkpoint_id
+      ? {
+          configurable: {
+            thread_id,
+            checkpoint_ns,
+            checkpoint_id: row.parent_checkpoint_id,
+          },
+        }
+      : undefined;
+    const pendingWrites = await this._loadWrites(row.pending_writes);
+
+    return {
+      config: finalConfig,
+      checkpoint,
+      metadata,
+      parentConfig,
+      pendingWrites,
+    };
+  }
+
+  async *list(
+    config: RunnableConfig,
+    options?: CheckpointListOptions
+  ): AsyncGenerator<CheckpointTuple> {
+    const { filter, before, limit } = options ?? {};
+    const [where, args] = this._searchWhere(config, filter, before);
+    let query = `${this.SQL_STATEMENTS.SELECT_SQL}${where} ORDER BY checkpoint_id DESC`;
+    if (limit !== undefined) {
+      query += ` LIMIT ${parseInt(limit as any, 10)}`;
+    }
+
+    const result = await this.pool.query(query, args);
+    for (const value of result.rows) {
+      yield {
+        config: {
+          configurable: {
+            thread_id: value.thread_id,
+            checkpoint_ns: value.checkpoint_ns,
+            checkpoint_id: value.checkpoint_id,
+          },
+        },
+        checkpoint: await this._loadCheckpoint(
+          value.checkpoint,
+          value.channel_values,
+          value.pending_sends
+        ),
+        metadata: await this._loadMetadata(value.metadata),
+        parentConfig: value.parent_checkpoint_id
+          ? {
+              configurable: {
+                thread_id: value.thread_id,
+                checkpoint_ns: value.checkpoint_ns,
+                checkpoint_id: value.parent_checkpoint_id,
+              },
+            }
+          : undefined,
+        pendingWrites: await this._loadWrites(value.pending_writes),
+      };
+    }
+  }
+
+  async put(
+    config: RunnableConfig,
+    checkpoint: Checkpoint,
+    metadata: CheckpointMetadata,
+    newVersions: ChannelVersions
+  ): Promise<RunnableConfig> {
+    if (config.configurable === undefined) {
+      throw new Error(`Missing "configurable" field in "config" param`);
+    }
+    const {
+      thread_id,
+      checkpoint_ns = "",
+      checkpoint_id,
+    } = config.configurable;
+
+    const nextConfig = {
+      configurable: {
+        thread_id,
+        checkpoint_ns,
+        checkpoint_id: checkpoint.id,
+      },
+    };
+    const client = await this.pool.connect();
+    const serializedCheckpoint = this._dumpCheckpoint(checkpoint);
+    try {
+      await client.query("BEGIN");
+      const serializedBlobs = this._dumpBlobs(
+        thread_id,
+        checkpoint_ns,
+        checkpoint.channel_values,
+        newVersions
+      );
+      for (const serializedBlob of serializedBlobs) {
+        await client.query(
+          this.SQL_STATEMENTS.UPSERT_CHECKPOINT_BLOBS_SQL,
+          serializedBlob
+        );
+      }
+      await client.query(this.SQL_STATEMENTS.UPSERT_CHECKPOINTS_SQL, [
+        thread_id,
+        checkpoint_ns,
+        checkpoint.id,
+        checkpoint_id,
+        serializedCheckpoint,
+        this._dumpMetadata(metadata),
+      ]);
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
+    return nextConfig;
+  }
+
+  async putWrites(
+    config: RunnableConfig,
+    writes: PendingWrite[],
+    taskId: string
+  ): Promise<void> {
+    const query = writes.every((w) => w[0] in WRITES_IDX_MAP)
+      ? this.SQL_STATEMENTS.UPSERT_CHECKPOINT_WRITES_SQL
+      : this.SQL_STATEMENTS.INSERT_CHECKPOINT_WRITES_SQL;
+
+    const dumpedWrites = this._dumpWrites(
+      config.configurable?.thread_id,
+      config.configurable?.checkpoint_ns,
+      config.configurable?.checkpoint_id,
+      taskId,
+      writes
+    );
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      for await (const dumpedWrite of dumpedWrites) {
+        await client.query(query, dumpedWrite);
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async end() {
+    return this.pool.end();
+  }
+} 

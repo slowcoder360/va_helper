@@ -15,6 +15,20 @@
       "when": 1730260588924,
       "tag": "0001_left_enchantress",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1741319264077,
+      "tag": "0002_lethal_big_bertha",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1738800000000,
+      "tag": "0003_indexes_and_source",
+      "breakpoints": true
     }
   ]
 }

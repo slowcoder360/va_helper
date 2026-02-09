@@ -34,7 +34,7 @@ const columns: ColumnDef<Claim>[] = [
       row.original.isCompleted ? (
         <Badge className="bg-green-500 text-white">Completed</Badge>
       ) : (
-        <Badge className="bg-blue-500 text-white">In Process</Badge>
+        <Badge className="bg-primary-500 text-white">In Process</Badge>
       )
     ),
   },

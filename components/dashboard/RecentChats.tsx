@@ -21,7 +21,7 @@ const RecentChats: React.FC<RecentChatsProps> = ({ chats }) => (
               <p className="text-sm text-muted-foreground">Status: {chat.status}</p>
             </div>
             <Link href={`/pdf-chat/${chat.id}`}>
-              <button className="text-blue-600 hover:underline">View Chat</button>
+              <button className="text-primary-600 hover:underline">View Chat</button>
             </Link>
           </li>
         ))}

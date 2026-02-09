@@ -19,20 +19,20 @@ export default function Header() {
               height={50}
             />
           </Link>
-          <Link href="/" className="text-4xl font-bold text-blue-950">
+          <Link href="/" className="text-4xl font-bold text-primary-950">
             VACAx
           </Link>
         </div>
 
         {/* Center Navigation Links */}
         <div className="hidden md:flex items-center justify-center space-x-20 flex-grow">
-          <a href="#for-veterans" className="text-gray-700 hover:text-blue-600 font-bold">
+          <a href="#for-veterans" className="text-gray-700 hover:text-primary-600 font-bold">
             For Veterans
           </a>
-          <a href="#for-vsos" className="text-gray-700 hover:text-blue-600 font-bold">
+          <a href="#for-vsos" className="text-gray-700 hover:text-primary-600 font-bold">
             For VSO&apos;s
           </a>
-          <a href="#about" className="text-gray-700 hover:text-blue-600 font-bold">
+          <a href="#about" className="text-gray-700 hover:text-primary-600 font-bold">
             About
           </a>
         </div>

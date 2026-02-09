@@ -21,7 +21,7 @@ const PendingForms: React.FC<PendingFormsProps> = ({ forms }) => (
               <p className="text-sm text-muted-foreground">Due Date: {form.dueDate}</p>
             </div>
             <Link href={`/form/${form.id}`}>
-              <button className="text-blue-600 hover:underline">Complete Form</button>
+              <button className="text-primary-600 hover:underline">Complete Form</button>
             </Link>
           </li>
         ))}

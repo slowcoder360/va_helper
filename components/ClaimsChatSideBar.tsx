@@ -50,7 +50,7 @@ const ClaimsChatSideBar = ({ chats, chatId }: Props) => {
           <Link key={chat.id} href={`/file-a-claim/${chat.id}`}>
             <div
               className={cn("rounded-lg p-3 text-slate-300 flex flex-col items-start", {
-                "bg-blue-600 text-white": chat.id === chatId,
+                "bg-primary-600 text-white": chat.id === chatId,
                 "hover:text-white": chat.id !== chatId,
               })}
             >

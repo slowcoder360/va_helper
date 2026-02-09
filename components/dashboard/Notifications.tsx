@@ -20,7 +20,7 @@ const Notifications: React.FC<NotificationsProps> = ({ notifications }) => (
               <p className="font-medium">{notification.message}</p>
             </div>
             <Link href={notification.link}>
-              <button className="text-blue-600 hover:underline">View</button>
+              <button className="text-primary-600 hover:underline">View</button>
             </Link>
           </li>
         ))}

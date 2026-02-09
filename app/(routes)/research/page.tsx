@@ -121,7 +121,7 @@ export default function ResearchPage() {
   
         {/* Display Stats */}
         {successCount > 0 && (
-          <div className="mt-4 p-4 bg-blue-100 rounded">
+          <div className="mt-4 p-4 bg-primary-100 rounded">
             <h2 className="text-xl font-semibold">Upload Summary</h2>
             <p>Successfully processed URLs: {successCount}</p>
             <p>Failed URLs: {failureCount}</p>

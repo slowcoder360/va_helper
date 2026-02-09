@@ -83,7 +83,7 @@ export const OnboardingForm = () => {
       document.cookie = `oauth_state=${state}; path=/`;
   
       // Ensure to use the appropriate client ID for the specific flow
-      const clientId = process.env.NEXT_PUBLIC_VA_SERVICE_HISTORY_CLIENT_ID!;
+      const clientId = process.env.NEXT_PUBLIC_VA_CLIENT_ID!;
       const redirectUri = process.env.NEXT_PUBLIC_VA_OAUTH_REDIRECT_URI!;
       const authorizationUrl = process.env.NEXT_PUBLIC_VA_AUTHORIZATION_URL!;
   

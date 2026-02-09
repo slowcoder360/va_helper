@@ -41,7 +41,7 @@ export default async function Lander() {
       {/* For Veterans Section */}
       <section id="for-veterans" className="bg-gradient-to-t from-gray-200 via-gray-100 to-gray-300 bg-opacity-90 backdrop-blur-md shadow-md py-16">
         <div className="container mx-auto px-6 text-center">
-          <h2 className="text-4xl font-bold text-blue-950 mb-4">
+          <h2 className="text-4xl font-bold text-primary-950 mb-4">
             Support for Veterans
           </h2>
           <p className="text-lg text-gray-700 mb-8 max-w-3xl mx-auto">
@@ -74,7 +74,7 @@ export default async function Lander() {
           {/* Call to Action */}
           <div className="mt-12">
             <Link href="/sign-up">
-              <Button className="bg-blue-600 text-white hover:bg-blue-700 rounded-lg px-8 py-3 shadow-lg">
+              <Button className="bg-primary-600 text-white hover:bg-primary-700 rounded-lg px-8 py-3 shadow-lg">
                 Get Started For Free <LogInIcon className="w-4 h-4 ml-2" />
               </Button>
             </Link>
@@ -116,7 +116,7 @@ export default async function Lander() {
           {/* Call to Action */}
           <div className="mt-12">
             <Link href="/get-started">
-              <Button className="bg-blue-600 text-white hover:bg-blue-700 rounded-lg px-8 py-3 shadow-lg">
+              <Button className="bg-primary-600 text-white hover:bg-primary-700 rounded-lg px-8 py-3 shadow-lg">
                 Get Started For Free <LogInIcon className="w-4 h-4 ml-2" />
               </Button>
             </Link>
@@ -137,7 +137,7 @@ export default async function Lander() {
             />
           </div>
 
-          <h2 className="text-4xl font-bold text-blue-950 mb-4">
+          <h2 className="text-4xl font-bold text-primary-950 mb-4">
             About VACAx
           </h2>
           <p className="text-lg text-gray-700 mb-8 max-w-3xl mx-auto">
@@ -150,7 +150,7 @@ export default async function Lander() {
           {/* Call to Action */}
           <div className="mt-12">
           <a href="mailto:info@vacax.org?subject=I want to get involved with VACAx&body=Please let us know how you would like to contribute!" target="_blank" rel="noopener noreferrer">
-            <Button className="bg-blue-600 text-white hover:bg-blue-700 rounded-lg px-8 py-3 shadow-lg">
+            <Button className="bg-primary-600 text-white hover:bg-primary-700 rounded-lg px-8 py-3 shadow-lg">
               Get Involved
             </Button>
           </a>

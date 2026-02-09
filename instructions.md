@@ -4,7 +4,7 @@
 
 **VacaX** (working title: **va_helper**) is a Next.js application that helps U.S. military veterans file VA benefit claims. The app uses a combination of:
 
-- **VA API Integrations** to securely fetch and update a user’s data.  
+- **VA API Integrations** to securely fetch and update a user's data.  
 - **AI Agents** (multi-agent system with a Supervisor) to guide veterans through claims, document uploads, and real-time Q&A about their PDF files.  
 - **PostgreSQL** via Drizzle ORM for local data storage (user profiles, tokens, claim info).  
 - **AWS S3** (and possibly other AWS services) for file uploads.  
@@ -17,13 +17,13 @@ Users log in through **ID.me/VA OAuth** (handled after their onboarding with the
 - **UI & Routes**: Basic routing is done (`app/(routes)/home`, `app/(routes)/profile`, etc.). Onboarding, doc chat (pdf-chat), dashboards, and some settings pages exist.  
 - **Auth**: Clerk.js is set up; we can already obtain VA session tokens for a couple of the APIs.  
 - **DB Schema**: A comprehensive set of tables is in place (user profiles, tokens, claims, appeals, etc.).  
-- **Focus**: Expand the multi-agent AI architecture, integrate additional VA APIs (beyond the current 1–2), and begin **testing the “graph”** to see how claims can be built and submitted end-to-end.
+- **Focus**: Expand the multi-agent AI architecture, integrate additional VA APIs (beyond the current 1–2), and begin **testing the "graph"** to see how claims can be built and submitted end-to-end.
 
 ---
 
 ## 2. Core Functionalities
 
-Below is the **numbered breakdown** of VacaX’s functionalities. Each top-level number (1, 2, 3…) represents a major feature area; sub-items detail the build steps or tasks for that feature.
+Below is the **numbered breakdown** of VacaX's functionalities. Each top-level number (1, 2, 3...) represents a major feature area; sub-items detail the build steps or tasks for that feature.
 
 ---
 
@@ -35,7 +35,7 @@ Below is the **numbered breakdown** of VacaX’s functionalities. Each top-level
 &nbsp;&nbsp;&nbsp;&nbsp;• Connect each agent to the rest via a shared context (e.g., LangChain, LangGraph, or a custom approach).
 
 1.2 **Set Up Conversation Agent**  
-&nbsp;&nbsp;&nbsp;&nbsp;• Build a “front-line” LLM-based agent that interacts with the user in real-time.  
+&nbsp;&nbsp;&nbsp;&nbsp;• Build a "front-line" LLM-based agent that interacts with the user in real-time.  
 &nbsp;&nbsp;&nbsp;&nbsp;• Retrieve user context (profile, service history) from the Supervisor to personalize responses.
 
 1.3 **Enable Claim-Building & Submission**  
@@ -60,12 +60,12 @@ Below is the **numbered breakdown** of VacaX’s functionalities. Each top-level
 &nbsp;&nbsp;&nbsp;&nbsp;• Use **Drizzle ORM** migrations if new fields/tables are required.
 
 2.3 **Sync With User Profiles**  
-&nbsp;&nbsp;&nbsp;&nbsp;• Upon login or “profile refresh,” query all relevant VA endpoints to build a **complete user profile**.  
+&nbsp;&nbsp;&nbsp;&nbsp;• Upon login or "profile refresh," query all relevant VA endpoints to build a **complete user profile**.  
 &nbsp;&nbsp;&nbsp;&nbsp;• Allow user-supplied overrides if needed (some fields might be missing in VA data).
 
 2.4 **Profile Dashboards & Data**  
 &nbsp;&nbsp;&nbsp;&nbsp;• In `app/(routes)/profile`, display the aggregated data from VA + local DB.  
-&nbsp;&nbsp;&nbsp;&nbsp;• Provide “refresh” or “check for updates” button to re-fetch from VA if the user wants to see the latest info.
+&nbsp;&nbsp;&nbsp;&nbsp;• Provide "refresh" or "check for updates" button to re-fetch from VA if the user wants to see the latest info.
 
 ---
 
@@ -100,7 +100,7 @@ Below is the **numbered breakdown** of VacaX’s functionalities. Each top-level
 &nbsp;&nbsp;&nbsp;&nbsp;• Store these messages in `claimMessages` for an audit trail.
 
 4.3 **Structured Output Agent**  
-&nbsp;&nbsp;&nbsp;&nbsp;• Once enough data is gathered, have an AI agent format the final “claim payload.”  
+&nbsp;&nbsp;&nbsp;&nbsp;• Once enough data is gathered, have an AI agent format the final "claim payload."  
 &nbsp;&nbsp;&nbsp;&nbsp;• Send that payload to the **Claims API** (and track the claim in the `claims` table with status updates).
 
 4.4 **Edge Cases & Error Handling**  
@@ -120,8 +120,8 @@ Below is the **numbered breakdown** of VacaX’s functionalities. Each top-level
 &nbsp;&nbsp;&nbsp;&nbsp;• Check if your existing columns (e.g., `diagnosticCode`, `disabilityRating`) are adequate or need more context.
 
 5.3 **Sync Logic**  
-&nbsp;&nbsp;&nbsp;&nbsp;• Decide how to handle “sync cycles”—whether to do a forced refresh at user login or keep a scheduled job to update.  
-&nbsp;&nbsp;&nbsp;&nbsp;• Mark stale data or track “last VA sync” in the DB.
+&nbsp;&nbsp;&nbsp;&nbsp;• Decide how to handle "sync cycles"—whether to do a forced refresh at user login or keep a scheduled job to update.  
+&nbsp;&nbsp;&nbsp;&nbsp;• Mark stale data or track "last VA sync" in the DB.
 
 5.4 **Reference Data**  
 &nbsp;&nbsp;&nbsp;&nbsp;• Explore using `./VA/descriptive_json/*` (e.g., `title-38.json`, `Benefits_Intake_API_Info_JSON.json`) for local reference.  
@@ -137,7 +137,7 @@ Below is the **numbered breakdown** of VacaX’s functionalities. Each top-level
 
 6.2 **VA Sandbox**  
 &nbsp;&nbsp;&nbsp;&nbsp;• Use the VA developer sandbox endpoints for end-to-end submission testing.  
-&nbsp;&nbsp;&nbsp;&nbsp;• Verify that you receive a valid “claim tracking number” or reference ID from the VA system.
+&nbsp;&nbsp;&nbsp;&nbsp;• Verify that you receive a valid "claim tracking number" or reference ID from the VA system.
 
 6.3 **Agent Collaboration**  
 &nbsp;&nbsp;&nbsp;&nbsp;• Verify that the **ProjectManagerAgent** (Supervisor) delegates tasks correctly to DB Query, PDF Processing, etc.  
@@ -168,7 +168,7 @@ As you integrate more VA endpoints, confirm that the schema can capture any extr
 
 ### 3.3 Key Dependencies
 
-Below are some **notable packages** from your `package.json` (production dependencies). This list helps your team or an AI agent understand what’s available:
+Below are some **notable packages** from your `package.json` (production dependencies). This list helps your team or an AI agent understand what's available:
 
 - **`next`, `react`, `react-dom`**: Core Next.js + React frameworks.  
 - **`@clerk/nextjs`**: Authentication (ID.me/VA OAuth) and session management.  
@@ -213,4 +213,4 @@ Check your **devDependencies** for linting, TypeScript, Drizzle CLI, etc.
 - **Testing & Iteration**: Use sample user accounts or test users in the VA sandbox environment. Update the code if you encounter new data fields or constraints.  
 - **Security**: Validate all tokens, keep user data safe in S3 (private bucket with presigned URLs), and remove logs with PII.
 
-By following these **instructions** and checking off each **core functionality**, you’ll build a complete, AI-driven VA claims solution that helps veterans streamline their benefit filing process.
+By following these **instructions** and checking off each **core functionality**, you'll build a complete, AI-driven VA claims solution that helps veterans streamline their benefit filing process.

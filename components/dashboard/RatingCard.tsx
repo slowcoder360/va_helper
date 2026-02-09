@@ -25,7 +25,7 @@ const RatingCard: React.FC<RatingCardProps> = ({ disabilityRating, monthlyCompen
         <div className="mb-4">
           {/* Disability Rating */}
           <p className="text-lg font-bold">
-            Disability Rating: <span className="text-blue-800">{disabilityRating}%</span>
+            Disability Rating: <span className="text-primary-800">{disabilityRating}%</span>
           </p>
           {/* Monthly Compensation */}
           <p className="text-lg font-bold">
@@ -37,7 +37,7 @@ const RatingCard: React.FC<RatingCardProps> = ({ disabilityRating, monthlyCompen
         <div className="flex flex-wrap gap-2 mt-4">
           {benefitQualifications.map((benefit) => (
             disabilityRating >= benefit.threshold && (
-              <Badge key={benefit.label} className="bg-blue-950 text-white">
+              <Badge key={benefit.label} className="bg-primary-950 text-white">
                 {benefit.label}
               </Badge>
             )

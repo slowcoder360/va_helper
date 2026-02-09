@@ -3,9 +3,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
 import { cookies } from "next/headers";
-import { db } from "@/lib/db"; // Adjust the import path as necessary
-import { userTokens, serviceHistories, disabilities, userProfiles } from "@/lib/db/schema"; // Adjust the import path as necessary
+import { db } from "@/lib/db";
+import { userTokens, serviceHistories, disabilities, userProfiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { vaApiClient } from "@/lib/services/vaApiClient";
+import { createLogger } from "@/lib/logging";
+
+const logger = createLogger("OAuthCallback");
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,8 +45,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Set client ID and client secret from environment variables
-    const clientId = process.env.VA_SERVICE_HISTORY_CLIENT_ID!;
-    const clientSecret = process.env.VA_SERVICE_HISTORY_CLIENT_SECRET!;
+    const clientId = process.env.VA_CLIENT_ID!;
+    const clientSecret = process.env.VA_CLIENT_SECRET!;
     const redirectUri = process.env.VA_OAUTH_REDIRECT_URI!;
 
     // Prepare the token request parameters
@@ -54,12 +58,7 @@ export async function GET(request: NextRequest) {
       redirect_uri: redirectUri,
     });
 
-    console.log("Token Exchange Parameters:", {
-      grant_type: "authorization_code",
-      code: code,
-      client_id: clientId,
-      redirect_uri: redirectUri,
-    });
+    logger.info("Exchanging authorization code for tokens", { userId });
 
     // Exchange the authorization code for tokens
     const tokenResponse = await axios.post(
@@ -74,8 +73,6 @@ export async function GET(request: NextRequest) {
 
     // Handle the token response
     const tokens = tokenResponse.data;
-    console.log("Tokens received:", tokens);
-
     const accessToken = tokens.access_token;
     const refreshToken = tokens.refresh_token || null;
     const expiresIn = tokens.expires_in; // In seconds
@@ -89,91 +86,67 @@ export async function GET(request: NextRequest) {
       expiresAt: expiresAt,
     });
 
-    // Asynchronously fetch and store service history and disability data
-    (async () => {
-      try {
-        // ===== Service History Data =====
-        const serviceHistoryResponse = await axios.get(
-          `${process.env.VA_SERVICE_HISTORY_API_BASE_URL}/service_history`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
-          }
-        );
-        const serviceHistoryData = serviceHistoryResponse.data.data;
-        console.log("Service History Data:", JSON.stringify(serviceHistoryData, null, 2));
+    logger.info("Tokens stored successfully", { userId });
 
-        for (const service of serviceHistoryData) {
-          console.log("Processing service record:", JSON.stringify(service, null, 2));
-          const attrs = service.attributes || {};
-          console.log("Extracted attributes:", JSON.stringify(attrs, null, 2));
+    // Fetch and store veteran data using the unified API client
+    // This is now properly awaited so errors are caught
+    try {
+      const serviceHistoryData = await vaApiClient.getServiceHistory(userId);
+      logger.info("Service history fetched", { userId, count: serviceHistoryData.length });
 
-          await db.insert(serviceHistories).values({
-            userId: userId,
-            branchOfService: attrs.branch_of_service,
-            startDate: attrs.start_date,
-            endDate: attrs.end_date ? attrs.end_date : null,
-            serviceType: attrs.service_type,
-            componentOfService: attrs.component_of_service,
-            separationReason: attrs.separation_reason,
-            dischargeStatus: attrs.discharge_status,
-            rankAtDischarge: attrs.pay_grade,
-            mos: attrs.mos,
-          });
-        }
-
-        // ===== Disability Ratings Data =====
-        const disabilityResponse = await axios.get(
-          `${process.env.VA_SERVICE_HISTORY_API_BASE_URL}/disability_rating`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
-          }
-        );
-        const disabilityData = disabilityResponse.data.data;
-        console.log("Disability Data:", JSON.stringify(disabilityData, null, 2));
-
-        // Update the combined disability rating in the user's profile
-        const combinedRating = disabilityData.attributes.combined_disability_rating;
-        if (combinedRating !== undefined) {
-          await db.update(userProfiles)
-            .set({ combinedDisabilityRating: combinedRating })
-            .where(eq(userProfiles.userId, userId));
-          console.log("Updated combined disability rating:", combinedRating);
-        } else {
-          console.warn("No combined disability rating found in the response.");
-        }
-
-        // Store individual disability ratings
-        const individualRatings = disabilityData.attributes.individual_ratings;
-        if (Array.isArray(individualRatings)) {
-          for (const rating of individualRatings) {
-            console.log("Processing individual rating:", JSON.stringify(rating, null, 2));
-            await db.insert(disabilities).values({
-              userId: userId,
-              name: rating.diagnostic_type_name,
-              diagnosticCode: rating.diagnostic_type_code,
-              disabilityRating: rating.rating_percentage,
-              staticInd: rating.static_ind,
-              effectiveDate: new Date(rating.effective_date).toISOString(),
-            });
-          }
-        } else {
-          console.error("individual_ratings is not an array:", individualRatings);
-        }
-
-        console.log("Service history and disability data successfully stored");
-      } catch (error) {
-        console.error("Error while fetching or storing VA data:", error);
+      for (const service of serviceHistoryData) {
+        await db.insert(serviceHistories).values({
+          userId: userId,
+          branchOfService: service.branchOfService,
+          startDate: service.startDate,
+          endDate: service.endDate || null,
+          serviceType: service.serviceType || null,
+          dischargeStatus: service.dischargeStatus || null,
+          rankAtDischarge: service.rankAtDischarge || null,
+        });
       }
-    })();
+
+      const ratingsData = await vaApiClient.getDisabilityRatings(userId);
+      logger.info("Disability ratings fetched", {
+        userId,
+        combinedRating: ratingsData.combinedRating,
+        count: ratingsData.individualRatings.length,
+      });
+
+      // Update the combined disability rating in the user's profile
+      if (ratingsData.combinedRating !== undefined) {
+        await db.update(userProfiles)
+          .set({ combinedDisabilityRating: ratingsData.combinedRating })
+          .where(eq(userProfiles.userId, userId));
+      }
+
+      // Store individual disability ratings
+      for (const rating of ratingsData.individualRatings) {
+        await db.insert(disabilities).values({
+          userId: userId,
+          name: rating.name,
+          diagnosticCode: rating.diagnosticCode,
+          disabilityRating: rating.rating,
+          staticInd: rating.isStatic,
+          effectiveDate: rating.effectiveDate,
+          source: "va",
+        });
+      }
+
+      logger.info("Veteran data stored successfully", { userId });
+    } catch (dataError) {
+      // Log the error but don't fail the OAuth flow -- tokens are saved
+      logger.error("Error fetching/storing veteran data after OAuth", {
+        userId,
+        error: dataError instanceof Error ? dataError.message : String(dataError),
+      });
+    }
 
     // Redirect to the home page
     return NextResponse.redirect(new URL("/home", request.url));
-  } catch (error: any) {
-    console.error("OAuth Callback Error:", error.response?.data || error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error("OAuth Callback Error", { error: errorMessage });
     return NextResponse.redirect(
       new URL(
         `/error?message=${encodeURIComponent("Authentication failed")}`,

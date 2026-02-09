@@ -38,7 +38,7 @@ const HomeSidebar: React.FC<HomeSidebarProps> = ({ firstChat }) => {
   };
 
   return (
-    <div className="w-full h-full flex flex-col p-4 bg-blue-800 sticky top-0">
+    <div className="w-full h-full flex flex-col p-4 bg-primary-800 sticky top-0">
       {/* Middle: List of Links */}
 
       {/* Instead of a direct link, add a button to create a new claim */}

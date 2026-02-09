@@ -10,6 +10,7 @@ import {
   varchar,
   date,
   boolean,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { InferModel } from "drizzle-orm";
 
@@ -17,6 +18,8 @@ import { InferModel } from "drizzle-orm";
 export const userSystemEnum = pgEnum("user_system_enum", ["system", "user"]);
 
 // User Profiles Table
+// Primary user identity table linked to Clerk auth. Contains PII collected
+// during onboarding (SSN, DOB, name, address). One row per Clerk user.
 export const userProfiles = pgTable("user_profiles", {
   userId: varchar("user_id", { length: 256 }).primaryKey(),
   ssn: varchar("ssn", { length: 11 }).notNull(),
@@ -88,6 +91,7 @@ export const disabilities = pgTable("disabilities", {
   disabilityRating: integer("disability_rating").notNull(),
   staticInd: boolean("static_ind"), // Indicates if the condition is permanent
   effectiveDate: date("effective_date").notNull(),
+  source: varchar("source", { length: 50 }).default("user"), // 'va' for VA-synced, 'user' for user-created
 });
 
 // Chats Table
@@ -153,6 +157,7 @@ export const claims = pgTable("claims", {
   dateSubmitted: timestamp("date_submitted").notNull(),
   claimDecision: varchar("claim_decision", { length: 256 }), // Optional
   dateOfLastUpdate: timestamp("date_of_last_update").notNull(),
+  source: varchar("source", { length: 50 }).default("user"), // 'va' for VA-synced, 'user' for user-created
 });
 
 // Claim Documents Table
@@ -216,3 +221,45 @@ export const documentUploads = pgTable("document_uploads", {
   uploadStatus: varchar("upload_status", { length: 256 }).notNull(),
   uploadedDateTime: timestamp("uploaded_date_time").notNull(),
 });
+
+// Veteran Profile Table for VA Claims
+// Extended profile for claim processing context. Stores complex JSONB data
+// (disabilities, medical records, service records, exposures, treatment facilities)
+// that doesn't fit the normalized structure of userProfiles/serviceHistories/disabilities.
+// Note: firstName, lastName, ssn, dateOfBirth overlap with userProfiles intentionally --
+// veteranProfiles may contain VA-verified values while userProfiles has self-reported values.
+export const veteranProfiles = pgTable("veteran_profiles", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 256 })
+    .notNull()
+    .references(() => userProfiles.userId, { onDelete: "cascade" }),
+  veteranId: varchar("veteran_id", { length: 256 }),
+  firstName: varchar("first_name", { length: 256 }),
+  lastName: varchar("last_name", { length: 256 }),
+  dateOfBirth: date("date_of_birth"),
+  ssn: varchar("ssn", { length: 11 }),
+  branch: varchar("branch", { length: 256 }),
+  serviceStartDate: date("service_start_date"),
+  serviceEndDate: date("service_end_date"),
+  dischargeType: varchar("discharge_type", { length: 256 }),
+  rank: varchar("rank", { length: 256 }),
+  // Store complex objects as JSON
+  disabilities: jsonb("disabilities").default([]),
+  medicalRecords: jsonb("medical_records").default([]),
+  serviceRecords: jsonb("service_records").default([]),
+  // Metadata
+  lastUpdate: timestamp("last_update").defaultNow(),
+  conversationContext: text("conversation_context"),
+  // Verification status
+  isVerified: boolean("is_verified").default(false),
+  verificationSource: varchar("verification_source", { length: 256 }),
+  verificationDate: timestamp("verification_date"),
+  // Additional fields for claim processing
+  claimRelevantPeriods: jsonb("claim_relevant_periods").default([]),
+  exposuresAndIncidents: jsonb("exposures_and_incidents").default([]),
+  treatmentFacilities: jsonb("treatment_facilities").default([]),
+});
+
+// Update the State type in your route.ts to use this schema
+export type VeteranProfile = typeof veteranProfiles.$inferSelect;
+export type NewVeteranProfile = typeof veteranProfiles.$inferInsert;

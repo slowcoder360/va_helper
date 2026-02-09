@@ -78,14 +78,14 @@ const FileUpload = () => {
         {uploading || isPending ? (
           <>
             {/* loading state */}
-            <Loader2 className="h-10 w-10 text-blue-500 animate-spin" />
+            <Loader2 className="h-10 w-10 text-primary-500 animate-spin" />
             <p className="mt-2 text-sm text-slate-400">
               Examining Your Document...
             </p>
           </>
         ) : (
           <>
-            <Inbox className="w-10 h-10 text-blue-500" />
+            <Inbox className="w-10 h-10 text-primary-500" />
             <p className="mt-2 text-sm text-slate-400">Drop PDF Here</p>
           </>
         )}
